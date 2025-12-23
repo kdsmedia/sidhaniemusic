@@ -11,17 +11,17 @@ const musicList = [
 
 // --- MENU UTAMA ---
 const mainMenu = (ctx) => {
-  const welcomeText = `*Halo! Selamat Datang di Sidhanie Bot* 🎵\n\nSidhanie adalah bot media universal untuk pemutar musik dan akses cepat ke media sosial kami.\n\nSilakan pilih menu di bawah ini:`;
+  const welcomeText = `*Halo! Selamat Datang di Sidhanie* 🎵\n\nSidhanie adalah Media Player universal untuk pemutar musik dan akses cepat ke media sosial kami.\n\nSilakan pilih menu di bawah ini:`;
   
   return ctx.replyWithMarkdown(welcomeText, 
     Markup.inlineKeyboard([
       [Markup.button.callback('🎵 MUSIK', 'show_list')],
       [
-        Markup.button.url('📱 TIKTOK', 'https://www.tiktok.com/@your_username'),
-        Markup.button.url('📸 INSTAGRAM', 'https://www.instagram.com/your_username')
+        Markup.button.url('📱 TIKTOK', 'https://www.tiktok.com/@sidhanie'),
+        Markup.button.url('📸 INSTAGRAM', 'https://www.instagram.com/sidhanie06')
       ],
       [
-        Markup.button.url('🎥 YOUTUBE', 'https://www.youtube.com/@your_channel'),
+        Markup.button.url('🎥 YOUTUBE', 'https://www.youtube.com/@sidhanie06'),
         Markup.button.url('🎧 SPOTIFY', 'https://open.spotify.com/user/your_id')
       ],
       [Markup.button.callback('🛡️ PRIVACY POLICY', 'show_privacy')]
@@ -48,7 +48,7 @@ bot.action('show_list', (ctx) => {
 
 // --- HANDLER: PRIVACY POLICY ---
 bot.action('show_privacy', (ctx) => {
-  const privacyText = `🛡️ *Privacy Policy - Sidhanie Bot*\n\n1. Bot ini tidak menyimpan data pribadi.\n2. Hak cipta milik artis masing-masing.\n\n📞 *Admin:* @your_admin_username`;
+  const privacyText = `🛡️ *Privacy Policy - Sidhanie*\n\n1. Media Player ini tidak menyimpan data pribadi.\n2. Hak cipta milik artis Sidhanie.\n\n📞 *Admin:* @sidhanie06`;
   ctx.answerCbQuery();
   return ctx.editMessageText(privacyText, {
     parse_mode: 'Markdown',
