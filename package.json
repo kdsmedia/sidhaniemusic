@@ -1,0 +1,9 @@
+{
+  "name": "sidhanie-bot",
+  "version": "1.0.0",
+  "description": "Sidhanie - Universal Media Player Bot",
+  "main": "api/webhook.js",
+  "dependencies": {
+    "telegraf": "^4.12.0"
+  }
+}
