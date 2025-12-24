@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "sidhanie-bot",
   "rewrites": [
     { "source": "/api/webhook", "destination": "/api/webhook.js" },
     { "source": "/music/(.*)", "destination": "/music/$1" }
@@ -9,8 +8,8 @@
     {
       "source": "/music/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Content-Type", "value": "audio/mpeg" }
+        { "key": "Content-Type", "value": "audio/mpeg" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
       ]
     }
   ]
