@@ -6,15 +6,27 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 /**
  * FUNGSI DYNAMIS: Membaca Folder Music
- * File dibaca dari folder /public/music agar bisa diakses secara publik oleh Vercel
+ * Menggunakan kombinasi __dirname dan process.cwd untuk memastikan folder terbaca di Vercel
  */
 const getDynamicMusicList = () => {
-  // Di Vercel, folder public berada di root saat runtime
-  const musicDir = path.join(process.cwd(), 'public', 'music');
+  // Mencoba beberapa kemungkinan path folder music di Vercel
+  const pathsToTry = [
+    path.join(process.cwd(), 'public', 'music'),
+    path.join(__dirname, '..', 'public', 'music'),
+    path.join('/var/task', 'public', 'music')
+  ];
+
+  let musicDir = '';
+  for (const p of pathsToTry) {
+    if (fs.existsSync(p)) {
+      musicDir = p;
+      break;
+    }
+  }
   
   try {
-    if (!fs.existsSync(musicDir)) {
-      console.error("Folder music tidak ditemukan di:", musicDir);
+    if (!musicDir) {
+      console.error("DEBUG: Folder music TIDAK ditemukan di path manapun.");
       return [];
     }
 
@@ -23,13 +35,11 @@ const getDynamicMusicList = () => {
       .sort();
     
     return files.map(file => {
-      // Mengambil angka di awal file sebagai ID (Contoh: "01")
       const songId = file.match(/^\d+/)?.[0] || "00";
-      // Membersihkan nama file untuk Judul
       const cleanTitle = file
-        .replace(/\.[^/.]+$/, "")   // Hapus ekstensi .mp3
-        .replace(/^\d+[._-]?/, '')  // Hapus "01." atau "01_" di depan
-        .replace(/[._-]/g, ' ')     // Ganti titik, underscore, atau dash dengan spasi
+        .replace(/\.[^/.]+$/, "")
+        .replace(/^\d+[._-]?/, '')
+        .replace(/[._-]/g, ' ')
         .trim();
 
       return {
@@ -69,7 +79,10 @@ bot.start((ctx) => sendMainMenu(ctx));
 // --- HANDLER: DAFTAR MUSIK ---
 bot.action('show_list', (ctx) => {
   const musicList = getDynamicMusicList();
-  if (musicList.length === 0) return ctx.answerCbQuery("Koleksi musik tidak ditemukan.");
+  if (musicList.length === 0) {
+    ctx.answerCbQuery();
+    return ctx.reply("❌ Koleksi musik belum terdeteksi. Pastikan folder 'public/music' berisi file .mp3 dan sudah di-push ke GitHub.");
+  }
 
   let message = "🎵 *Daftar Musik Sidhanie:*\n\n";
   musicList.forEach(item => {
@@ -84,7 +97,7 @@ bot.action('show_list', (ctx) => {
   }).catch(() => ctx.replyWithMarkdown(message));
 });
 
-// --- HANDLER: PRIVACY POLICY ---
+// --- HANDLER: PRIVACY POLICY & LAINNYA ---
 bot.action('show_privacy', (ctx) => {
   const privacyText = `🛡️ *Privacy Policy - Sidhanie*\n\n1. Media Player ini tidak menyimpan data pribadi.\n2. Hak cipta milik artis Sidhanie.\n\n📞 *Admin:* @sidhanie06`;
   ctx.answerCbQuery();
@@ -106,13 +119,11 @@ async function playMusic(ctx, songId) {
   const songIndex = musicList.findIndex(s => parseInt(s.id) === parseInt(songId));
   const song = musicList[songIndex];
 
-  if (!song) {
-    return ctx.reply(`❌ Nomor ${songId} tidak ditemukan.`);
-  }
+  if (!song) return ctx.reply(`❌ Nomor ${songId} tidak ditemukan.`);
 
-  // URL Dinamis: Vercel otomatis melayani folder /public di root URL
-  const domain = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
-  const audioUrl = `${domain}/music/${encodeURIComponent(song.fileName)}`;
+  // Gunakan host dinamis agar tidak 404
+  const host = ctx.headers ? ctx.headers.host : process.env.VERCEL_URL;
+  const audioUrl = `https://${host}/music/${encodeURIComponent(song.fileName)}`;
   
   const nextSong = musicList[(songIndex + 1) % musicList.length];
 
@@ -132,16 +143,13 @@ async function playMusic(ctx, songId) {
       ])
     });
   } catch (error) {
-    console.error("Error mengirim audio:", error);
-    return ctx.reply(`❌ Gagal memutar lagu. Pastikan file "${song.fileName}" tidak melebihi 50MB.`);
+    return ctx.reply(`❌ Gagal memutar. Pastikan link ini bisa dibuka di browser: ${audioUrl}`);
   }
 }
 
 bot.on('text', (ctx) => {
   const input = ctx.message.text.trim();
-  if (/^\d+$/.test(input)) {
-    return playMusic(ctx, input);
-  }
+  if (/^\d+$/.test(input)) return playMusic(ctx, input);
 });
 
 bot.action(/^playnext_(\d+)$/, (ctx) => {
@@ -157,7 +165,6 @@ module.exports = async (req, res) => {
       res.status(200).send('Sidhanie is Active!');
     }
   } catch (err) {
-    console.error(err);
     res.status(500).send('Server Error');
   }
 };
