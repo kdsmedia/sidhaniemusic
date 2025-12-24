@@ -1,43 +1,9 @@
 {
   "version": 2,
-  "name": "sidhaniemusic",
-  "builds": [
-    {
-      "src": "api/webhook.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "music/**",
-      "use": "@vercel/static"
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/webhook",
       "destination": "/api/webhook.js"
-    },
-    {
-      "source": "/music/(.*)",
-      "destination": "/music/$1"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/music/(.*)",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "audio/mpeg"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
     }
   ]
 }
