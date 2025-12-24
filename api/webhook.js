@@ -6,27 +6,14 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 /**
  * FUNGSI DYNAMIS: Membaca Folder Music
- * Menggunakan kombinasi __dirname dan process.cwd untuk memastikan folder terbaca di Vercel
+ * File dibaca dari folder /public/music
  */
 const getDynamicMusicList = () => {
-  // Mencoba beberapa kemungkinan path folder music di Vercel
-  const pathsToTry = [
-    path.join(process.cwd(), 'public', 'music'),
-    path.join(__dirname, '..', 'public', 'music'),
-    path.join('/var/task', 'public', 'music')
-  ];
-
-  let musicDir = '';
-  for (const p of pathsToTry) {
-    if (fs.existsSync(p)) {
-      musicDir = p;
-      break;
-    }
-  }
+  const musicDir = path.join(process.cwd(), 'public', 'music');
   
   try {
-    if (!musicDir) {
-      console.error("DEBUG: Folder music TIDAK ditemukan di path manapun.");
+    if (!fs.existsSync(musicDir)) {
+      console.error("DEBUG: Folder music tidak ditemukan di path:", musicDir);
       return [];
     }
 
@@ -35,11 +22,14 @@ const getDynamicMusicList = () => {
       .sort();
     
     return files.map(file => {
+      // Mengambil angka di awal file sebagai ID (Contoh: "01")
       const songId = file.match(/^\d+/)?.[0] || "00";
+      
+      // Membersihkan nama file untuk Judul
       const cleanTitle = file
-        .replace(/\.[^/.]+$/, "")
-        .replace(/^\d+[._-]?/, '')
-        .replace(/[._-]/g, ' ')
+        .replace(/\.[^/.]+$/, "")   // Hapus ekstensi .mp3
+        .replace(/^\d+[._-]?/, '')  // Hapus "01." atau "01_" di depan
+        .replace(/[._-]/g, ' ')     // Ganti titik, underscore, atau dash dengan spasi
         .trim();
 
       return {
@@ -67,7 +57,7 @@ const sendMainMenu = (ctx) => {
       ],
       [
         Markup.button.url('🎥 YOUTUBE', 'https://www.youtube.com/@sidhanie06'),
-        Markup.button.url('🎧 SPOTIFY', 'https://open.spotify.com/user/sidhanie')
+        Markup.button.url('🎧 SPOTIFY', 'https://spotify.com')
       ],
       [Markup.button.callback('🛡️ PRIVACY POLICY', 'show_privacy')]
     ])
@@ -81,7 +71,7 @@ bot.action('show_list', (ctx) => {
   const musicList = getDynamicMusicList();
   if (musicList.length === 0) {
     ctx.answerCbQuery();
-    return ctx.reply("❌ Koleksi musik belum terdeteksi. Pastikan folder 'public/music' berisi file .mp3 dan sudah di-push ke GitHub.");
+    return ctx.reply("❌ Koleksi musik tidak ditemukan di server. Pastikan folder 'public/music' berisi file .mp3.");
   }
 
   let message = "🎵 *Daftar Musik Sidhanie:*\n\n";
@@ -97,7 +87,7 @@ bot.action('show_list', (ctx) => {
   }).catch(() => ctx.replyWithMarkdown(message));
 });
 
-// --- HANDLER: PRIVACY POLICY & LAINNYA ---
+// --- HANDLER: PRIVACY POLICY ---
 bot.action('show_privacy', (ctx) => {
   const privacyText = `🛡️ *Privacy Policy - Sidhanie*\n\n1. Media Player ini tidak menyimpan data pribadi.\n2. Hak cipta milik artis Sidhanie.\n\n📞 *Admin:* @sidhanie06`;
   ctx.answerCbQuery();
@@ -119,19 +109,23 @@ async function playMusic(ctx, songId) {
   const songIndex = musicList.findIndex(s => parseInt(s.id) === parseInt(songId));
   const song = musicList[songIndex];
 
-  if (!song) return ctx.reply(`❌ Nomor ${songId} tidak ditemukan.`);
+  if (!song) {
+    return ctx.reply(`❌ Nomor ${songId} tidak ditemukan.`);
+  }
 
-  // Gunakan host dinamis agar tidak 404
-  const host = ctx.headers ? ctx.headers.host : process.env.VERCEL_URL;
+  // Menggunakan host dari request headers agar URL selalu sinkron dengan domain Vercel
+  const host = ctx.headers ? ctx.headers.host : (process.env.VERCEL_URL || 'sidhaniemusic.vercel.app');
   const audioUrl = `https://${host}/music/${encodeURIComponent(song.fileName)}`;
   
   const nextSong = musicList[(songIndex + 1) % musicList.length];
 
   try {
     await ctx.sendChatAction('upload_document');
+    
+    // Kirim Audio dengan metadata lengkap agar suara muncul dan player bekerja
     return await ctx.replyWithAudio({ url: audioUrl }, {
       title: song.title,
-      performer: "Sidhanie Player",
+      performer: "Sidhanie Music",
       caption: `▶️ *SEDANG DIPUTAR*\n\n🎼 *Judul:* ${song.title}\n🔢 *Nomor:* ${song.id}`,
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
@@ -143,28 +137,35 @@ async function playMusic(ctx, songId) {
       ])
     });
   } catch (error) {
-    return ctx.reply(`❌ Gagal memutar. Pastikan link ini bisa dibuka di browser: ${audioUrl}`);
+    console.error("Error mengirim audio:", error);
+    return ctx.reply(`❌ Gagal memutar lagu. Link file mungkin bermasalah atau ukuran terlalu besar.\n\nCoba cek manual: ${audioUrl}`);
   }
 }
 
+// Handler input teks nomor
 bot.on('text', (ctx) => {
   const input = ctx.message.text.trim();
-  if (/^\d+$/.test(input)) return playMusic(ctx, input);
+  if (/^\d+$/.test(input)) {
+    return playMusic(ctx, input);
+  }
 });
 
+// Handler tombol Next
 bot.action(/^playnext_(\d+)$/, (ctx) => {
   ctx.answerCbQuery('Memutar lagu berikutnya...');
   return playMusic(ctx, ctx.match[1]);
 });
 
+// Ekspor untuk Vercel Serverless Function
 module.exports = async (req, res) => {
   try {
     if (req.method === 'POST') {
       await bot.handleUpdate(req.body, res);
     } else {
-      res.status(200).send('Sidhanie is Active!');
+      res.status(200).send('Sidhanie Bot is Online!');
     }
   } catch (err) {
+    console.error("Server Error:", err);
     res.status(500).send('Server Error');
   }
 };
