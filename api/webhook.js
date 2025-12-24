@@ -1,13 +1,41 @@
 const { Telegraf, Markup } = require('telegraf');
+const fs = require('fs');
+const path = require('path');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Database Musik (Sesuaikan dengan file di folder music/)
-const musicList = [
-  { id: "01", title: "Lagu Kenangan - Artis A" },
-  { id: "02", title: "Melodi Senja - Artis B" },
-  { id: "03", title: "Rhythm Malam - Artis C" }
-];
+/**
+ * FUNGSI OTOMATIS: Membaca Folder Music
+ * Mengambil nama file asli dan menjadikannya judul secara dinamis
+ */
+const getDynamicMusicList = () => {
+  const musicDir = path.join(process.cwd(), 'music');
+  try {
+    const files = fs.readdirSync(musicDir)
+      .filter(file => file.endsWith('.mp3'))
+      .sort();
+    
+    return files.map(file => {
+      // Mengambil angka di awal file sebagai ID
+      const songId = file.match(/^\d+/)?.[0] || "00";
+      // Membersihkan nama file untuk dijadikan Judul yang tampil
+      const cleanTitle = file
+        .replace('.mp3', '')       // Hapus .mp3
+        .replace(/^\d+[_-]?/, '')  // Hapus angka di depan (misal "01_")
+        .replace(/[_-]/g, ' ')     // Ganti _ atau - dengan spasi
+        .trim();
+
+      return {
+        id: songId,
+        title: cleanTitle || file, // Jika judul kosong, tampilkan nama file asli
+        fileName: file
+      };
+    });
+  } catch (error) {
+    console.error("Gagal membaca folder musik:", error);
+    return [];
+  }
+};
 
 // --- MENU UTAMA ---
 const mainMenu = (ctx) => {
@@ -22,7 +50,7 @@ const mainMenu = (ctx) => {
       ],
       [
         Markup.button.url('🎥 YOUTUBE', 'https://www.youtube.com/@sidhanie06'),
-        Markup.button.url('🎧 SPOTIFY', 'https://open.spotify.com/user/your_id')
+        Markup.button.url('🎧 SPOTIFY', 'https://open.spotify.com/')
       ],
       [Markup.button.callback('🛡️ PRIVACY POLICY', 'show_privacy')]
     ])
@@ -31,8 +59,11 @@ const mainMenu = (ctx) => {
 
 bot.start((ctx) => mainMenu(ctx));
 
-// --- HANDLER: LIST MUSIK ---
+// --- HANDLER: LIST MUSIK (Judul Sesuai Nama File) ---
 bot.action('show_list', (ctx) => {
+  const musicList = getDynamicMusicList();
+  if (musicList.length === 0) return ctx.answerCbQuery("Koleksi musik kosong.");
+
   let message = "🎵 *Daftar Musik Sidhanie:*\n\n";
   musicList.forEach(item => {
     message += `*${item.id}*. ${item.title}\n`;
@@ -58,44 +89,48 @@ bot.action('show_privacy', (ctx) => {
 
 bot.action('back_to_main', (ctx) => {
   ctx.answerCbQuery();
-  ctx.deleteMessage();
+  ctx.deleteMessage().catch(() => {});
   return mainMenu(ctx);
 });
 
-// --- LOGIKA PUTAR MUSIK ---
-bot.on('text', async (ctx) => {
+// --- LOGIKA PUTAR MUSIK & NAVIGASI ---
+async function sendMusic(ctx, songId) {
+  const musicList = getDynamicMusicList();
+  // Cari lagu berdasarkan ID (angka di depan nama file)
+  const songIndex = musicList.findIndex(s => parseInt(s.id) === parseInt(songId));
+  const song = musicList[songIndex];
+
+  if (!song) {
+    return ctx.reply(`❌ Nomor ${songId} tidak ditemukan.`);
+  }
+
+  const audioUrl = `https://${process.env.VERCEL_URL}/music/${song.fileName}`;
+  const nextSong = musicList[(songIndex + 1) % musicList.length];
+
+  await ctx.sendChatAction('upload_document');
+  return ctx.replyWithAudio({ url: audioUrl }, {
+    caption: `▶️ *SEDANG DIPUTAR*\n\n🎼 *Judul:* ${song.title}\n🔢 *Nomor:* ${song.id}`,
+    parse_mode: 'Markdown',
+    ...Markup.inlineKeyboard([
+      [
+        Markup.button.callback('⏹ Stop', 'back_to_main'),
+        Markup.button.callback('⏭ Next', `playnext_${nextSong.id}`)
+      ],
+      [Markup.button.callback('📱 Menu Utama', 'back_to_main')]
+    ])
+  });
+}
+
+bot.on('text', (ctx) => {
   const input = ctx.message.text.trim();
   if (/^\d+$/.test(input)) {
-    const songId = input.padStart(2, '0');
-    const song = musicList.find(s => s.id === songId);
-
-    if (song) {
-      const audioUrl = `https://${process.env.VERCEL_URL}/music/${songId}.mp3`;
-      await ctx.sendChatAction('upload_document');
-      
-      const nextIndex = (musicList.findIndex(s => s.id === songId) + 1) % musicList.length;
-      const nextId = musicList[nextIndex].id;
-
-      return ctx.replyWithAudio({ url: audioUrl }, {
-        caption: `▶️ *SEDANG DIPUTAR*\n🎼 *Judul:* ${song.title}\n🔢 *Nomor:* ${songId}`,
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('⏹ Stop', 'back_to_main'),
-            Markup.button.callback('⏭ Next', `next_${nextId}`)
-          ],
-          [Markup.button.callback('📱 Menu Utama', 'back_to_main')]
-        ])
-      });
-    }
+    return sendMusic(ctx, input);
   }
 });
 
-bot.action(/^next_(\d+)$/, (ctx) => {
-  const nextId = ctx.match[1];
+bot.action(/^playnext_(\d+)$/, (ctx) => {
   ctx.answerCbQuery('Memutar lagu berikutnya...');
-  // Logic to trigger next song by sending text or calling function
-  ctx.reply(`Ketik ${nextId} untuk lanjut memutar lagu berikutnya.`);
+  return sendMusic(ctx, ctx.match[1]);
 });
 
 module.exports = async (req, res) => {
